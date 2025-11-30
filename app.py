@@ -11,8 +11,6 @@ import plotly.express as px
 from plotly.subplots import make_subplots
 from scipy.signal import find_peaks
 from scipy.stats import pearsonr
-import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
 import io
 
 # ========================================
