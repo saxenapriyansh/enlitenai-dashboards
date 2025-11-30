@@ -411,6 +411,71 @@ def plot_dose_response(weekly_df, medication):
     
     return fig
 
+def plot_medication_stacked_bar(med_df, granularity='Weekly'):
+    """Create stacked bar chart showing medication load over time."""
+    medications = ['Lamictal', 'Clonazepam', 'Vimpat', 'Zonisamide', 'Fycompa']
+    colors = ['#E74C3C', '#3498DB', '#2ECC71', '#F39C12', '#9B59B6']
+    
+    if granularity == 'Weekly':
+        # Aggregate by week
+        med_df_copy = med_df.copy()
+        med_df_copy['week'] = ((med_df_copy['day'] - 1) // 7) + 1
+        grouped = med_df_copy.groupby('week')[medications].mean().reset_index()
+        x_axis = grouped['week']
+        x_label = 'Week Number'
+        title = 'Weekly Medication Load (Stacked)'
+    elif granularity == 'Monthly':
+        # Aggregate by month
+        med_df_copy = med_df.copy()
+        med_df_copy['month'] = ((med_df_copy['day'] - 1) // 30) + 1
+        med_df_copy['month'] = med_df_copy['month'].clip(upper=12)
+        grouped = med_df_copy.groupby('month')[medications].mean().reset_index()
+        x_axis = grouped['month']
+        x_label = 'Month'
+        title = 'Monthly Medication Load (Stacked)'
+        month_names = ['Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug']
+        x_axis = [month_names[int(m)-1] if int(m) <= 12 else 'Aug' for m in x_axis]
+    else:  # Daily - sample every 7 days to avoid overcrowding
+        sampled = med_df[::7].copy()
+        x_axis = sampled['day']
+        x_label = 'Day of Year'
+        title = 'Daily Medication Load (Stacked, sampled)'
+        grouped = sampled
+    
+    fig = go.Figure()
+    
+    # Add stacked bars for each medication
+    for med, color in zip(medications, colors):
+        fig.add_trace(go.Bar(
+            x=x_axis,
+            y=grouped[med] if granularity != 'Daily' else sampled[med],
+            name=med,
+            marker_color=color,
+            hovertemplate='<b>%{fullData.name}</b><br>Dose: %{y:.1f} mg<extra></extra>'
+        ))
+    
+    fig.update_layout(
+        title=title,
+        xaxis_title=x_label,
+        yaxis_title='Total Medication Dose (mg)',
+        barmode='stack',
+        template='plotly_white',
+        height=500,
+        showlegend=True,
+        legend=dict(
+            orientation='h',
+            yanchor='bottom',
+            y=1.02,
+            xanchor='right',
+            x=1
+        ),
+        hovermode='x unified',
+        xaxis=dict(gridcolor='#ECF0F1'),
+        yaxis=dict(gridcolor='#ECF0F1')
+    )
+    
+    return fig
+
 def plot_assessments(assessment_df):
     """Plot assessment time series."""
     assessments = ['QoL', 'Anxiety', 'Depression', 'Behavioral']
@@ -2689,6 +2754,50 @@ def render_treatment_management(med_df, weekly_df, daily_df):
         <div class="insight-box">
             <b>🩺 Clinical Note:</b> Track dose adjustments and correlate with seizure control changes. 
             Consider medication half-life when assessing time to effect.
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown("---")
+        
+        # Medication Load Stacked Bar Chart
+        st.markdown('<div class="subsection-header">Medication Load Over Time</div>', unsafe_allow_html=True)
+        
+        st.markdown("""
+        **Stacked Bar Chart:** Shows total medication burden and individual drug contributions over time.
+        Higher bars indicate increased medication load, useful for identifying polytherapy burden.
+        """)
+        
+        col1, col2 = st.columns([3, 1])
+        
+        with col2:
+            stack_granularity = st.selectbox(
+                "Granularity:",
+                options=['Weekly', 'Monthly', 'Daily'],
+                key='medication_stack_granularity'
+            )
+        
+        fig_stacked = plot_medication_stacked_bar(med_df, granularity=stack_granularity)
+        st.plotly_chart(fig_stacked, use_container_width=True)
+        
+        # Calculate total medication load statistics
+        total_load = med_df[medications].sum(axis=1)
+        
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Current Total Load", f"{total_load.iloc[-1]:.1f} mg")
+        with col2:
+            st.metric("Average Load", f"{total_load.mean():.1f} mg")
+        with col3:
+            st.metric("Max Load", f"{total_load.max():.1f} mg")
+        with col4:
+            change = total_load.iloc[-1] - total_load.iloc[0]
+            st.metric("Load Change", f"{change:+.1f} mg", delta=f"{'↑ Increase' if change > 0 else '↓ Decrease'}")
+        
+        st.markdown("""
+        <div class="insight-box">
+            <b>🩺 Polytherapy Assessment:</b> Monitor total medication load for potential side effect burden. 
+            Higher total doses may increase adverse effects while providing better seizure control. 
+            Consider simplifying regimen if seizure control is good and load is high.
         </div>
         """, unsafe_allow_html=True)
     
