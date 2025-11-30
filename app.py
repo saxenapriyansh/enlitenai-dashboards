@@ -94,6 +94,21 @@ def prepare_medication_dataframe(medications_df):
     # The CSV already has the correct structure, just ensure it has a 'day' column
     if 'day' not in medications_df.columns:
         medications_df['day'] = range(1, len(medications_df) + 1)
+    
+    # Rename proprietary medication names to generic labels
+    rename_map = {
+        'Lamictal': 'Med A',
+        'Clonazepam': 'Med B',
+        'Vimpat': 'Med C',
+        'Zonisamide': 'Med D',
+        'Fycompa': 'Med E'
+    }
+    
+    # Only rename columns that exist
+    existing_renames = {old: new for old, new in rename_map.items() if old in medications_df.columns}
+    if existing_renames:
+        medications_df = medications_df.rename(columns=existing_renames)
+    
     return medications_df
 
 def prepare_assessment_dataframe(assessments_df, total_days=364):
@@ -128,7 +143,7 @@ def create_weekly_aggregates(daily_df, med_df, assessment_df):
     med_df_with_week = med_df.copy()
     med_df_with_week['week'] = med_df_with_week['day'].map(day_to_week)
     
-    weekly_meds = med_df_with_week.groupby('week')[['Lamictal', 'Clonazepam', 'Vimpat', 'Zonisamide', 'Fycompa']].mean().reset_index()
+    weekly_meds = med_df_with_week.groupby('week')[['Med A', 'Med B', 'Med C', 'Med D', 'Med E']].mean().reset_index()
     
     # Aggregate assessments by week (using actual Week# mapping)
     assessment_df_with_week = assessment_df.copy()
@@ -259,7 +274,7 @@ def plot_heatmap_calendar(daily_df):
 
 def plot_medications(med_df):
     """Plot medication dose trajectories."""
-    medications = ['Lamictal', 'Clonazepam', 'Vimpat', 'Zonisamide', 'Fycompa']
+    medications = ['Med A', 'Med B', 'Med C', 'Med D', 'Med E']
     colors = ['#E74C3C', '#3498DB', '#2ECC71', '#F39C12', '#9B59B6']
     
     fig = go.Figure()
@@ -293,7 +308,7 @@ def plot_medications(med_df):
 
 def detect_dose_changes(med_df, threshold=10):
     """Detect medication dose changes."""
-    medications = ['Lamictal', 'Clonazepam', 'Vimpat', 'Zonisamide', 'Fycompa']
+    medications = ['Med A', 'Med B', 'Med C', 'Med D', 'Med E']
     changes = []
     
     for med in medications:
@@ -317,7 +332,7 @@ def detect_dose_changes(med_df, threshold=10):
 
 def plot_dose_changes(med_df, changes_df):
     """Plot medication trajectories with dose change markers."""
-    medications = ['Lamictal', 'Clonazepam', 'Vimpat', 'Zonisamide', 'Fycompa']
+    medications = ['Med A', 'Med B', 'Med C', 'Med D', 'Med E']
     colors = ['#E74C3C', '#3498DB', '#2ECC71', '#F39C12', '#9B59B6']
     
     fig = go.Figure()
@@ -413,7 +428,7 @@ def plot_dose_response(weekly_df, medication):
 
 def plot_medication_stacked_bar(med_df, granularity='Weekly'):
     """Create stacked bar chart showing medication load over time."""
-    medications = ['Lamictal', 'Clonazepam', 'Vimpat', 'Zonisamide', 'Fycompa']
+    medications = ['Med A', 'Med B', 'Med C', 'Med D', 'Med E']
     colors = ['#E74C3C', '#3498DB', '#2ECC71', '#F39C12', '#9B59B6']
     
     if granularity == 'Weekly':
@@ -574,8 +589,8 @@ def plot_seizure_qol_overlay(weekly_df):
 def plot_correlation_heatmap(weekly_df):
     """Create correlation heatmap for clinical metrics."""
     # Select numeric columns for correlation
-    corr_columns = ['total_seizures', 'severe_seizures', 'Lamictal', 'Clonazepam', 
-                    'Vimpat', 'Zonisamide', 'Fycompa', 'QoL', 'Anxiety', 'Depression', 'Behavioral']
+    corr_columns = ['total_seizures', 'severe_seizures', 'Med A', 'Med B', 
+                    'Med C', 'Med D', 'Med E', 'QoL', 'Anxiety', 'Depression', 'Behavioral']
     
     # Filter to only include columns that exist and have data
     available_columns = [col for col in corr_columns if col in weekly_df.columns]
@@ -626,7 +641,7 @@ def plot_integrated_dashboard(daily_df, weekly_df, med_df, assessment_df):
     )
     
     # Row 1, Col 2: Medications
-    medications = ['Lamictal', 'Vimpat', 'Fycompa']
+    medications = ['Med A', 'Med C', 'Med E']
     colors = ['#E74C3C', '#2ECC71', '#9B59B6']
     for med, color in zip(medications, colors):
         mask = ~np.isnan(med_df[med])
@@ -2691,7 +2706,7 @@ def render_treatment_management(med_df, weekly_df, daily_df):
         st.markdown('<div class="subsection-header">Current Medication Regimen</div>', unsafe_allow_html=True)
         
         # Current doses (most recent)
-        medications = ['Lamictal', 'Clonazepam', 'Vimpat', 'Zonisamide', 'Fycompa']
+        medications = ['Med A', 'Med B', 'Med C', 'Med D', 'Med E']
         current_doses = {}
         for med in medications:
             current_doses[med] = med_df[med].iloc[-1]
@@ -2700,6 +2715,7 @@ def render_treatment_management(med_df, weekly_df, daily_df):
         
         with col1:
             st.markdown("**Current Doses (Most Recent):**")
+            st.caption("*Generic medication labels for privacy*")
             for med, dose in current_doses.items():
                 st.metric(label=med, value=f"{dose:.1f} mg")
         
@@ -3251,7 +3267,7 @@ def render_clinical_report(daily_df, weekly_df, med_df, assessment_df):
         # Calculate key correlations
         key_correlations = []
         
-        medications = ['Lamictal', 'Clonazepam', 'Vimpat', 'Zonisamide', 'Fycompa']
+        medications = ['Med A', 'Med B', 'Med C', 'Med D', 'Med E']
         for med in medications:
             data = weekly_df[[med, 'total_seizures']].dropna()
             if len(data) > 1:
@@ -3850,7 +3866,7 @@ def main():
             medications_file = st.file_uploader(
                 "Medications CSV",
                 type=['csv'],
-                help="CSV with columns: date, day, Lamictal, Clonazepam, Vimpat, Zonisamide, Fycompa"
+                help="CSV with columns: date, day, Med A, Med B, Med C, Med D, Med E"
             )
         
         with col3:
@@ -3879,11 +3895,11 @@ def main():
             **2. medications.csv:**
             - `date`: Date (YYYY-MM-DD)
             - `day`: Day number (1-364)
-            - `Lamictal`: Dose in mg
-            - `Clonazepam`: Dose in mg
-            - `Vimpat`: Dose in mg
-            - `Zonisamide`: Dose in mg
-            - `Fycompa`: Dose in mg
+            - `Med A`: Dose in mg
+            - `Med B`: Dose in mg
+            - `Med C`: Dose in mg
+            - `Med D`: Dose in mg
+            - `Med E`: Dose in mg
             
             **3. assessments.csv:**
             - `date`: Date (YYYY-MM-DD)
