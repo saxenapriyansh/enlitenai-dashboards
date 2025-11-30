@@ -785,6 +785,214 @@ def plot_tachygrid(daily_df):
     
     return fig
 
+def plot_activity_heatmap_by_granularity(daily_df, temporal_df, granularity, show_severe_only=False):
+    """Create activity heatmap based on selected granularity."""
+    
+    seizure_col = 'daily_severe' if show_severe_only else 'daily_total'
+    seizure_label = "Severe Seizures" if show_severe_only else "Seizures"
+    
+    if granularity == '24 Hours x Week':
+        # Hour of day x Day of week heatmap
+        if temporal_df is None or len(temporal_df) == 0:
+            fig = go.Figure()
+            fig.add_annotation(
+                text="No temporal data available",
+                xref="paper", yref="paper",
+                x=0.5, y=0.5, showarrow=False,
+                font=dict(size=14, color="gray")
+            )
+            return fig
+        
+        # Filter for severe if needed
+        if show_severe_only:
+            temporal_df_filtered = temporal_df[temporal_df['is_severe'] == True].copy()
+        else:
+            temporal_df_filtered = temporal_df.copy()
+        
+        # Create hour x day-of-week matrix
+        heatmap_data = temporal_df_filtered.groupby(['hour', 'day_of_week']).size().reset_index(name='count')
+        matrix = heatmap_data.pivot(index='hour', columns='day_of_week', values='count').fillna(0)
+        
+        # Ensure all hours and days
+        all_hours = list(range(24))
+        all_days = list(range(1, 8))
+        matrix = matrix.reindex(index=all_hours, columns=all_days, fill_value=0)
+        
+        day_names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+        hour_labels = [f"{h:02d}:00" for h in range(24)]
+        
+        fig = go.Figure(data=go.Heatmap(
+            z=matrix.values,
+            x=day_names,
+            y=hour_labels,
+            colorscale='RdYlBu_r',
+            colorbar=dict(title=seizure_label),
+            hovertemplate='<b>%{x}</b><br>%{y}<br>'+seizure_label+': %{z}<extra></extra>'
+        ))
+        
+        fig.update_layout(
+            title=f'Hour of Day × Day of Week - {seizure_label}',
+            xaxis_title='Day of Week',
+            yaxis_title='Hour of Day',
+            height=600,
+            template='plotly_white',
+            xaxis=dict(side='top'),
+            yaxis=dict(autorange='reversed')
+        )
+        return fig
+    
+    elif granularity == 'Day x Week':
+        # Day of week x Week heatmap (like the screenshot)
+        # Create a matrix: rows = weeks, columns = days of week
+        heatmap_data = daily_df.groupby(['week', 'day_of_week'])[seizure_col].sum().reset_index()
+        matrix = heatmap_data.pivot(index='week', columns='day_of_week', values=seizure_col).fillna(0)
+        
+        # Ensure all weeks and days
+        all_weeks = list(range(1, 53))
+        all_days = list(range(1, 8))
+        matrix = matrix.reindex(index=all_weeks, columns=all_days, fill_value=0)
+        
+        day_names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+        week_labels = [f'Week {w}' if w % 2 == 1 else '' for w in range(1, 53)]  # Show odd weeks only
+        
+        # Enhanced medical-themed colorscale
+        colorscale = [
+            [0, '#F8F9FA'],
+            [0.1, '#E3F2FD'],
+            [0.2, '#BBDEFB'],
+            [0.35, '#90CAF9'],
+            [0.5, '#FFF9C4'],
+            [0.65, '#FFE082'],
+            [0.75, '#FFAB91'],
+            [0.85, '#FF7043'],
+            [0.92, '#E53935'],
+            [1.0, '#B71C1C']
+        ]
+        
+        fig = go.Figure(data=go.Heatmap(
+            z=matrix.values,
+            x=day_names,
+            y=week_labels,
+            colorscale=colorscale,
+            colorbar=dict(
+                title=dict(text=f"<b>{seizure_label}</b>", font=dict(size=11)),
+                thickness=18,
+                len=0.7
+            ),
+            hovertemplate='<b>Week %{y}</b><br>%{x}<br>'+seizure_label+': %{z}<extra></extra>'
+        ))
+        
+        fig.update_layout(
+            title=f'Week × Day of Week Heatmap - {seizure_label}',
+            xaxis_title='Day of Week',
+            yaxis_title='Week',
+            height=700,
+            template='plotly_white',
+            xaxis=dict(side='bottom', tickfont=dict(size=11)),
+            yaxis=dict(autorange='reversed', tickfont=dict(size=9))
+        )
+        return fig
+    
+    elif granularity == 'Day x Month':
+        # Day of month x Month heatmap
+        daily_df_copy = daily_df.copy()
+        daily_df_copy['month'] = ((daily_df_copy['day'] - 1) // 30) + 1
+        daily_df_copy['month'] = daily_df_copy['month'].clip(upper=12)
+        daily_df_copy['day_of_month'] = ((daily_df_copy['day'] - 1) % 30) + 1
+        
+        heatmap_data = daily_df_copy.groupby(['day_of_month', 'month'])[seizure_col].sum().reset_index()
+        matrix = heatmap_data.pivot(index='day_of_month', columns='month', values=seizure_col).fillna(0)
+        
+        month_names = ['Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug']
+        day_labels = [str(d) if d % 5 == 1 else '' for d in range(1, 31)]
+        
+        colorscale = [
+            [0, '#F8F9FA'],
+            [0.1, '#E3F2FD'],
+            [0.2, '#BBDEFB'],
+            [0.35, '#90CAF9'],
+            [0.5, '#FFF9C4'],
+            [0.65, '#FFE082'],
+            [0.75, '#FFAB91'],
+            [0.85, '#FF7043'],
+            [0.92, '#E53935'],
+            [1.0, '#B71C1C']
+        ]
+        
+        fig = go.Figure(data=go.Heatmap(
+            z=matrix.values,
+            x=month_names[:len(matrix.columns)],
+            y=day_labels,
+            colorscale=colorscale,
+            colorbar=dict(
+                title=dict(text=f"<b>{seizure_label}</b>", font=dict(size=11)),
+                thickness=18,
+                len=0.7
+            ),
+            hovertemplate='<b>%{x}</b><br>Day %{y}<br>'+seizure_label+': %{z}<extra></extra>'
+        ))
+        
+        fig.update_layout(
+            title=f'Day of Month × Month Heatmap - {seizure_label}',
+            xaxis_title='Month',
+            yaxis_title='Day of Month',
+            height=600,
+            template='plotly_white',
+            xaxis=dict(side='top', tickangle=0),
+            yaxis=dict(autorange='reversed')
+        )
+        return fig
+    
+    else:  # 'Week x Month'
+        # Week of month x Month heatmap
+        daily_df_copy = daily_df.copy()
+        daily_df_copy['month'] = ((daily_df_copy['day'] - 1) // 30) + 1
+        daily_df_copy['month'] = daily_df_copy['month'].clip(upper=12)
+        daily_df_copy['week_of_month'] = ((daily_df_copy['day'] - 1) % 30) // 7 + 1
+        
+        heatmap_data = daily_df_copy.groupby(['week_of_month', 'month'])[seizure_col].sum().reset_index()
+        matrix = heatmap_data.pivot(index='week_of_month', columns='month', values=seizure_col).fillna(0)
+        
+        month_names = ['Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug']
+        week_labels = ['Week 1', 'Week 2', 'Week 3', 'Week 4', 'Week 5']
+        
+        colorscale = [
+            [0, '#F8F9FA'],
+            [0.1, '#E3F2FD'],
+            [0.2, '#BBDEFB'],
+            [0.35, '#90CAF9'],
+            [0.5, '#FFF9C4'],
+            [0.65, '#FFE082'],
+            [0.75, '#FFAB91'],
+            [0.85, '#FF7043'],
+            [0.92, '#E53935'],
+            [1.0, '#B71C1C']
+        ]
+        
+        fig = go.Figure(data=go.Heatmap(
+            z=matrix.values,
+            x=month_names[:len(matrix.columns)],
+            y=week_labels[:len(matrix.index)],
+            colorscale=colorscale,
+            colorbar=dict(
+                title=dict(text=f"<b>{seizure_label}</b>", font=dict(size=11)),
+                thickness=18,
+                len=0.7
+            ),
+            hovertemplate='<b>%{x}</b><br>%{y}<br>'+seizure_label+': %{z}<extra></extra>'
+        ))
+        
+        fig.update_layout(
+            title=f'Week of Month × Month Heatmap - {seizure_label}',
+            xaxis_title='Month',
+            yaxis_title='Week of Month',
+            height=400,
+            template='plotly_white',
+            xaxis=dict(side='top', tickangle=0),
+            yaxis=dict(autorange='reversed')
+        )
+        return fig
+
 def generate_temporal_seizure_data(daily_df, num_seizures_per_day=None):
     """
     Generate realistic temporal (time-of-day) data for seizures.
@@ -2057,51 +2265,112 @@ def render_seizure_analysis(daily_df, weekly_df):
         """, unsafe_allow_html=True)
     
     with tab2:
-        st.markdown('<div class="subsection-header">TachyGrid - Year-at-a-Glance Heatmap</div>', unsafe_allow_html=True)
+        st.markdown('<div class="subsection-header">Activity Heatmap with Granularity Control</div>', unsafe_allow_html=True)
         
-        fig = plot_tachygrid(daily_df)
+        st.markdown("""
+        **Heatmap View Options:**
+        - **24 Hours × Week**: Hourly patterns across days of the week
+        - **Day × Week**: Daily activity across all 52 weeks (best for pattern recognition)
+        - **Day × Month**: Daily activity within each month
+        - **Week × Month**: Weekly patterns across months
+        """)
+        
+        # Granularity selector for heatmap
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col1:
+            heatmap_granularity = st.selectbox(
+                "Heatmap View:",
+                options=['Day x Week', '24 Hours x Week', 'Day x Month', 'Week x Month'],
+                key='heatmap_granularity'
+            )
+        with col3:
+            show_severe_heatmap = st.checkbox("Show severe seizures only", key="heatmap_severe")
+        
+        # Generate temporal data if needed
+        if heatmap_granularity == '24 Hours x Week':
+            with st.spinner("Analyzing temporal patterns..."):
+                temporal_df = generate_temporal_seizure_data(daily_df)
+        else:
+            temporal_df = None
+        
+        # Create heatmap
+        fig = plot_activity_heatmap_by_granularity(daily_df, temporal_df, heatmap_granularity, show_severe_heatmap)
         st.plotly_chart(fig, use_container_width=True)
         
-        # Calendar statistics
+        st.markdown("---")
+        
+        # Add the original TachyGrid as a bonus view
+        with st.expander("📅 View TachyGrid (GitHub-Style Calendar)", expanded=False):
+            st.markdown("**Year-at-a-Glance Calendar View:**")
+            fig_tachygrid = plot_tachygrid(daily_df)
+            st.plotly_chart(fig_tachygrid, use_container_width=True)
+        
+        st.markdown("---")
+        
+        # Statistics based on selected granularity
+        st.markdown("**Key Insights:**")
         col1, col2, col3, col4 = st.columns(4)
-        daily_total = daily_df['daily_total'].values
         
-        with col1:
-            max_day_idx = np.argmax(daily_total)
-            st.metric(
-                label="🔴 Highest Activity Day",
-                value=f"Day {max_day_idx + 1}",
-                delta=f"{daily_total[max_day_idx]:.0f} seizures"
-            )
+        seizure_col = 'daily_severe' if show_severe_heatmap else 'daily_total'
         
-        with col2:
-            zero_days = np.sum(daily_total == 0)
-            st.metric(
-                label="🟢 Seizure-Free Days",
-                value=f"{zero_days}",
-                delta=f"{(zero_days/364*100):.1f}% of year"
-            )
+        if heatmap_granularity == '24 Hours x Week':
+            if temporal_df is not None and len(temporal_df) > 0:
+                if show_severe_heatmap:
+                    filtered_df = temporal_df[temporal_df['is_severe'] == True]
+                else:
+                    filtered_df = temporal_df
+                
+                hourly_dist = filtered_df.groupby('hour').size()
+                dow_dist = filtered_df.groupby('day_of_week').size()
+                
+                with col1:
+                    peak_hour = hourly_dist.idxmax() if len(hourly_dist) > 0 else 0
+                    st.metric("Peak Hour", f"{peak_hour:02d}:00")
+                with col2:
+                    peak_day = dow_dist.idxmax() if len(dow_dist) > 0 else 1
+                    day_names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+                    st.metric("Peak Day", day_names[int(peak_day)-1])
+                with col3:
+                    morning = len(filtered_df[(filtered_df['hour'] >= 6) & (filtered_df['hour'] < 12)])
+                    st.metric("Morning (6-12)", f"{morning}")
+                with col4:
+                    evening = len(filtered_df[(filtered_df['hour'] >= 18) & (filtered_df['hour'] < 24)])
+                    st.metric("Evening (18-24)", f"{evening}")
         
-        with col3:
-            median_nonzero = np.median(daily_total[daily_total > 0])
-            st.metric(
-                label="📊 Median (Active)",
-                value=f"{median_nonzero:.1f}",
-                delta="When seizures occur"
-            )
+        elif heatmap_granularity == 'Day x Week':
+            # Week x Day statistics
+            daily_total = daily_df[seizure_col].values
+            with col1:
+                max_day_idx = np.argmax(daily_total)
+                st.metric("Highest Activity Day", f"Day {max_day_idx + 1}")
+            with col2:
+                zero_days = np.sum(daily_total == 0)
+                st.metric("Seizure-Free Days", f"{zero_days}")
+            with col3:
+                median_nonzero = np.median(daily_total[daily_total > 0])
+                st.metric("Median (Active)", f"{median_nonzero:.1f}")
+            with col4:
+                high_days = np.sum(daily_total >= np.percentile(daily_total, 75))
+                st.metric("High Activity Days", f"{high_days}")
         
-        with col4:
-            high_days = np.sum(daily_total >= np.percentile(daily_total, 75))
-            st.metric(
-                label="⚠️ High Activity Days",
-                value=f"{high_days}",
-                delta="≥75th percentile"
-            )
+        else:
+            # General statistics
+            daily_total = daily_df[seizure_col].values
+            with col1:
+                st.metric("Total Seizures", f"{int(daily_total.sum())}")
+            with col2:
+                st.metric("Average/Day", f"{daily_total.mean():.1f}")
+            with col3:
+                st.metric("Max in Single Day", f"{int(daily_total.max())}")
+            with col4:
+                zero_days = np.sum(daily_total == 0)
+                st.metric("Seizure-Free Days", f"{zero_days}")
         
         st.markdown("""
         <div class="insight-box">
-            <b>🩺 Clinical Use:</b> Quick visual scan for clusters of high-seizure days, weekly patterns, 
-            or seasonal trends. Lighter squares indicate better control periods.
+            <b>🩺 Clinical Use:</b> Heatmaps reveal temporal patterns and clusters of high-seizure periods. 
+            Use different granularities to identify hourly, daily, weekly, or monthly patterns. 
+            Darker colors indicate higher seizure burden requiring clinical attention.
         </div>
         """, unsafe_allow_html=True)
     
